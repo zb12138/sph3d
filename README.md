@@ -1,3 +1,5 @@
+## 对SPH3D的旋转不变改进！
+
 ## *Spherical Kernel for Efficient Graph Convolution on 3D Point Clouds*
 Created by Huan Lei, Naveed Akhtar and Ajmal Mian
 
