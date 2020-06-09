@@ -7,32 +7,44 @@ import importlib
 import os
 import sys
 import scipy.io as sio
-import data_util
 
+ROTATION = True
+
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
+# baseDir = os.path.dirname(os.path.abspath(__file__))
+# rootDir = os.path.dirname(baseDir)
+# print(baseDir)
+# print(rootDir)
+# sys.path.append(baseDir)
+# sys.path.append(os.path.join(rootDir, 'models'))
+# sys.path.append(os.path.join(rootDir, 'utils'))
 baseDir = os.path.dirname(os.path.abspath(__file__))
 rootDir = os.path.dirname(baseDir)
-print(baseDir)
-print(rootDir)
+print("baseDir: "+baseDir)
+print("rootDir: "+rootDir)
 sys.path.append(baseDir)
-sys.path.append(os.path.join(rootDir, 'models'))
-sys.path.append(os.path.join(rootDir, 'utils'))
+sys.path.append(rootDir)
 
+import utils.data_util as data_util
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch Size during training [default: 16]')
-parser.add_argument('--log_dir', default='log', help='Log dir [default: log]')
-parser.add_argument('--model_name', default='model.ckpt', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--log_dir', default='log_modelnet_inv0', help='Log dir [default: log]')
+# parser.add_argument('--model_name', default='model.ckpt-228', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--model_name', default='bestmodel.ckpt', help='model checkpoint file path [default: model.ckpt]')
 parser.add_argument('--num_votes', type=int, default=1, help='Aggregate classification scores from multiple rotations [default: 1]')
 FLAGS = parser.parse_args()
 
 BATCH_SIZE = FLAGS.batch_size
 LOG_DIR = os.path.join(rootDir,FLAGS.log_dir)
-MODEL_NAME = FLAGS.model_name
-GPU_INDEX = FLAGS.gpu
-MODEL = importlib.import_module(FLAGS.model) # import network module
+MODEL_NAME = os.path.join(LOG_DIR,FLAGS.model_name)
+# MODEL_NAME = tf.train.latest_checkpoint(LOG_DIR)
+print("MODEL_NAME: ",MODEL_NAME)
 
-spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,FLAGS.model+'.py'))
+GPU_INDEX = FLAGS.gpu
+# MODEL = importlib.import_module("models."+FLAGS.model) 
+spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,FLAGS.model+'.py'))# import network module
 MODEL = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(MODEL)
 
@@ -45,10 +57,10 @@ spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,'modelnet_
 net_config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(net_config)
 
-dataDir = os.path.join(rootDir, 'data/modelnet40')
-testlist = [line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+dataDir = "/mnt/Cloud/fuchy/sph3d/data/modelnet40/"
+testlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
 SHAPE_NAMES = [line.rstrip() for line in \
-               open(os.path.join(rootDir, 'data/modelnet40_shape_names.txt'))]
+               open(os.path.join(dataDir, 'modelnet40_shape_names.txt'))]
 
 NUM_POINT = net_config.num_input
 NUM_CLASSES = net_config.num_cls
@@ -62,19 +74,19 @@ def log_string(out_str):
 
 
 def placeholder_inputs(batch_size, num_point):
-    xyz_pl = tf.placeholder(tf.float32, shape=(batch_size, num_point, 3))
-    label_pl = tf.placeholder(tf.int32, shape=(batch_size))
-
+    xyz_pl = tf.placeholder(tf.float32, [batch_size, num_point, 3])
+    label_pl = tf.placeholder(tf.int32, [batch_size])
     return xyz_pl, label_pl
 
 
-def augment_fn(batch_xyz):
+def augment_fn(augment_xyz):
     # perform augmentation on the first np.int32(augment_ratio*bsize) samples
-    augment_xyz = data_util.rotate_point_cloud(batch_xyz)
-    augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
-    augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
-    augment_xyz = data_util.shift_point_cloud(augment_xyz)
-
+    if ROTATION:
+        augment_xyz = data_util.rotate_point_cloud_so3(augment_xyz)
+        augment_xyz = data_util.rotate_point_cloud(augment_xyz)
+        augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz,angle_sigma=3.14,angle_clip=3.14)
+    # augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
+    # augment_xyz = data_util.shift_point_cloud(augment_xyz)
     return augment_xyz
 
 
@@ -169,7 +181,8 @@ def eval_one_epoch(sess, ops, next_test_element, num_votes=1, topk=1):
         try:
             batch_xyz, batch_label = sess.run(next_test_element)
             bsize = batch_xyz.shape[0]
-
+            if bsize != BATCH_SIZE:
+                continue
             batch_xyz = batch_xyz[:, :, [0, 2, 1]]  # xzy to xyz
 
             print('Batch: %03d, batch size: %d' % (batch_idx, bsize))
@@ -180,8 +193,9 @@ def eval_one_epoch(sess, ops, next_test_element, num_votes=1, topk=1):
             batch_pred_sum = np.zeros((BATCH_SIZE, NUM_CLASSES))  # score for classes
             for vote_idx in range(num_votes):
                 augment_xyz = batch_xyz.copy()
-                if vote_idx>0:
-                    augment_xyz = augment_fn(augment_xyz)
+                # if vote_idx>0:
+                
+                augment_xyz = augment_fn(augment_xyz)
 
                 feed_dict = {ops['xyz_pl']: augment_xyz,
                              ops['label_pl']: cur_batch_label,

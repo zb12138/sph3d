@@ -3,16 +3,17 @@ import tensorflow as tf
 import os, sys
 import glob
 import argparse
+import h5py
 
 # parser = argparse.ArgumentParser()
 # parser.add_argument('--data_path', required=True, help='path to the directory of the point cloud dataset')
 # INFO = parser.parse_args()
 # dataDir = INFO.data_path
-dataDir = "/mnt/Cloud/fuchy/sph3d/Stanford3dDataset_v1.2-3cm"
-print(dataDir)
-
+# print(INFO,dataDir)
+dataDir = "/mnt/Cloud/fuchy/indoor3d_sem_seg_hdf5_data"
 rootDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(rootDir,'tf_ops/sampling'))
+
 
 def log_string(LOG_FOUT, out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -35,7 +36,7 @@ def _int64_feature(value):
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
-def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
+def make_tfrecord_seg(roomData,roomName,block_point_num_thresh=10000,
                       block_size=2.5, context_size=0.3, interval = 0.5,
                       store_folder="", verbose=True, debug=False):
     classes = {'ceiling':0,
@@ -67,10 +68,6 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
 
     LOG_FOUT = open(os.path.join(store_folder, 'log_block.txt'), 'a')
 
-    AreaID = buildPath.split('/')[-2]
-    BuildID = buildPath.split('/')[-1]
-    dataset = glob.glob(os.path.join(buildPath,'Annotations','*.txt'))
-
     if not store_folder=="" and not os.path.exists(store_folder):
         os.mkdir(store_folder)
 
@@ -80,40 +77,28 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
         import matplotlib.pyplot as plt
         dataset = dataset[0:1] # test with the first element
 
-    xyz = []
-    rgb = []
-    seg_label = []
-    # print(len(dataset),dataset)
-    for filepath in dataset:
-        # print(filepath)
-        data = np.loadtxt(filepath,dtype=np.float32,delimiter=' ')
 
-        assert (data.shape[1]==6)  # the input point cloud has xyz+rgb
 
-        filename = os.path.basename(filepath)
-        key = filename.split('_')[0]
-        if key in classes:
-            seg_label.append(np.zeros((data.shape[0],), np.int32)+np.int32(classes[key]))
-        else:
-            # print('not exist class %s'%key)
-            # continue
-            seg_label.append(np.zeros((data.shape[0],), np.int32)+np.int32(classes['clutter']))
 
-        xyz.append(data[:, 0:3])
-        rgb.append(data[:, 3:])
+    data = np.array(roomData[0])
+    label =np.array(roomData[1])
 
-    scene_label = scenes[BuildID.split('_')[0].lower()]
-    scene_idx = np.int32(BuildID.split('_')[1])
+    assert (data.shape[-1]==9)  # the input point cloud has xyz+rgb+relative location in the scene
+    AreaID,BuildID = _roomNameType(roomName)
 
-    xyz = np.concatenate(xyz, axis=0)
-    rgb = np.concatenate(rgb, axis=0)
-    seg_label = np.concatenate(seg_label, axis=0)
+    xyz = (data[:,:,0:3]).reshape((-1,3))
+    rgb = 2*(data[:,:,3:6]).reshape((-1,3))-1
+    seg_label = label.reshape((-1,1))
+    
+    ridx = np.random.randint(0,len(xyz),size=25000)
+    xyz = xyz[ridx]
+    rgb = rgb[ridx]
+    seg_label = seg_label[ridx]
+
+    scene_label =scenes[BuildID.split('_')[0].lower()] 
+    scene_idx = np.int32(BuildID.split('_')[1]) 
+
     print(xyz.shape, rgb.shape, seg_label.shape)
-
-    # =================color processing/normalization==================
-    rgb = 2*rgb/255.0 - 1 # normalize to [-1,1] range
-    # =================================================================
-
     # =====================location normalization======================
     xyz_min = np.amin(xyz, axis=0, keepdims=True)
     xyz_max = np.amax(xyz, axis=0, keepdims=True)
@@ -125,10 +110,10 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
     rel_xyz[:,0] = 2*xyz[:,0]/(xyz_max[0,0]-xyz_min[0,0])
     rel_xyz[:,1] = 2*xyz[:,1]/(xyz_max[0,1]-xyz_min[0,1])
     rel_xyz[:,2] = 2*xyz[:,2]/(xyz_max[0,2]-xyz_min[0,2]) - 1.0
-    print('min rel_xyz:', np.amin(rel_xyz, axis=0, keepdims=True))
-    print('max rel_xyz:', np.amax(rel_xyz, axis=0, keepdims=True))
-    print('min rgb:', np.amin(rgb, axis=0, keepdims=True))
-    print('max rgb:', np.amax(rgb, axis=0, keepdims=True))
+    # print('min rel_xyz:', np.amin(rel_xyz, axis=0, keepdims=True))
+    # print('max rel_xyz:', np.amax(rel_xyz, axis=0, keepdims=True))
+    # print('min rgb:', np.amin(rgb, axis=0, keepdims=True))
+    # print('max rgb:', np.amax(rgb, axis=0, keepdims=True))
     # =================================================================
 
     filename = os.path.join(store_folder, '%s_%s.tfrecord'%(AreaID, BuildID))
@@ -177,13 +162,13 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
 
             if np.sum(inner) < block_point_num_thresh: # merge small blocks into oen of their big neighbor block
                 coord = [(x-block_size, x+block_size,   y,            y+block_size),   \
-                         (x,            x+2*block_size, y,            y+block_size),   \
-                         (x,            x+block_size,   y-block_size, y+block_size),   \
-                         (x,            x+block_size,   y,            y+2*block_size), \
-                         (x-block_size, x+block_size,   y-block_size, y+block_size),   \
-                         (x-block_size, x+block_size,   y,            y+2*block_size), \
-                         (x,            x+2*block_size, y-block_size, y+block_size),   \
-                         (x,            x+2*block_size, y,            y+2*block_size)]
+                        (x,            x+2*block_size, y,            y+block_size),   \
+                        (x,            x+block_size,   y-block_size, y+block_size),   \
+                        (x,            x+block_size,   y,            y+2*block_size), \
+                        (x-block_size, x+block_size,   y-block_size, y+block_size),   \
+                        (x-block_size, x+block_size,   y,            y+2*block_size), \
+                        (x,            x+2*block_size, y-block_size, y+block_size),   \
+                        (x,            x+2*block_size, y,            y+2*block_size)]
 
                 nbr_idx = -1
                 for nnId in range(len(coord)):
@@ -224,6 +209,9 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
             index, = np.where(index)
             index = np.int32(index)
 
+            label = label.astype('int32')
+            inner = inner.astype('int32')
+
             xyz_raw = points.tostring()
             rel_xyz_raw = rel_points.tostring()
             rgb_raw = color.tostring()
@@ -243,8 +231,24 @@ def make_tfrecord_seg(buildPath, block_point_num_thresh=10000,
 
     writer.close()
 
-    return
+    return 
 
+
+def _get_data_files(list_filename):
+    with open(list_filename) as f:
+        return [line.rstrip() for line in f]
+
+def _load_data_file(name):
+    f = h5py.File(name,"r")
+    data = f["data"][:]
+    label = f["label"][:]
+    return data, label
+
+def _roomNameType(rname):
+    sname = rname.split("_")
+    name = (sname[0]+"_"+sname[1])
+    rtype = (sname[2]+"_"+sname[3])
+    return name,rtype
 
 if __name__=='__main__':
     block_size = 1.5
@@ -254,16 +258,42 @@ if __name__=='__main__':
         os.mkdir(store_folder)
 
     Area = ['Area_1','Area_2','Area_3','Area_4','Area_5','Area_6']
+    all_files = _get_data_files(os.path.join(dataDir, "all_files.txt"))
+    room_filelist = _get_data_files(os.path.join(dataDir, "room_filelist.txt"))
 
-    for currArea in Area:
-        buildings = glob.glob(os.path.join(dataDir,currArea,'*'))
-        for buildPath in buildings:
-            currBuild = os.path.basename(buildPath)
+    RoomIndx = [0]
+    roomname = room_filelist[0]
+    for k, room in enumerate(room_filelist):
+        if(room == roomname):
+            continue
+        roomname = room
+        RoomIndx.append(k)
+    RoomIndx.append(len(room_filelist))
+    
+    i = 0
+    globalId = 0
+    offset = 0
+    data = []
+    label= []
+    for f in all_files:
+        newdata, newlabel = _load_data_file(os.path.join(dataDir, f.split(r"/")[-1]))
+        data.append(newdata)
+        label.append(newlabel)
+        datalen = len(newdata)
+        globalId += datalen
+        while(globalId>RoomIndx[i+1]):
+            r = slice(-offset+RoomIndx[i],-offset+RoomIndx[i+1])
+            print("========================make tfrecords of s3dis %s======================="%room_filelist[RoomIndx[i]])
+            make_tfrecord_seg((data[r], label[r]),room_filelist[RoomIndx[i]], block_point_num_thresh=10000, block_size=block_size,
+                                interval=interval, store_folder=store_folder, debug=False)
+            i += 1
+        data = data[RoomIndx[i] - offset:]
+        label = label[RoomIndx[i] - offset:]
+        offset =  RoomIndx[i]
 
-            print("========================make tfrecords of s3dis %s-%s======================="%(currArea,currBuild))
-            make_tfrecord_seg(buildPath, block_point_num_thresh=10000, block_size=block_size,
-                              interval=interval, store_folder=store_folder, debug=False)
-            print("===================================The End====================================")
+
+    print("===================================The End====================================")
+
 
     for i, currArea in enumerate(Area):
         files = glob.glob(os.path.join(store_folder,'*.tfrecord'))

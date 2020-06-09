@@ -21,8 +21,8 @@ parser.add_argument('--config', default='shapenet_config', help='Model name [def
 parser.add_argument('--log_dir', default='log_shapenet', help='Log dir [default: log_shapenet]')
 parser.add_argument('--max_epoch', type=int, default=501, help='Epoch to run [default: 501]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
-parser.add_argument('--model_name', default='model.ckpt', help='model checkpoint file path [default: model.ckpt]')
-parser.add_argument('--shape_name', default=None, help='Which class to perform segment on')
+parser.add_argument('--model_name', default='model.ckpt-500', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--shape_name', default='Airplane', help='Which class to perform segment on')
 FLAGS = parser.parse_args()
 
 BATCH_SIZE = FLAGS.batch_size
@@ -82,15 +82,22 @@ def placeholder_inputs(batch_size, num_point):
 
     return xyz_pl, label_pl
 
+# def augment_fn(batch_xyz):
+#     # perform augmentation on the first np.int32(augment_ratio*bsize) samples
+#     augment_xyz = data_util.rotate_point_cloud(batch_xyz)
+#     augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz,angle_sigma=3.14,angle_clip=3.14)
+#     # augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
+#     # augment_xyz = data_util.shift_point_cloud(augment_xyz)
+#     return augment_xyz
 
 def augment_fn(batch_xyz):
     augment_xyz = batch_xyz
-    augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
+    augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz,angle_sigma=3.14,angle_clip=3.14)
+    # augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
     augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
     augment_xyz = data_util.shift_point_cloud(augment_xyz)
     augment_xyz = data_util.jitter_point_cloud(augment_xyz)
     batch_xyz = augment_xyz
-
     return batch_xyz
 
 
@@ -105,7 +112,7 @@ def parse_fn(item):
     seg_label = tf.decode_raw(features['part_label'], tf.int32)
 
     xyz = tf.reshape(xyz,[-1,3])
-    seg_label = tf.reshape(seg_label, [-1, 1])
+    seg_label = tf.reshape(seg_label, [-1, 1]) - seg_info[cls]
     all_in_one = tf.concat((xyz, tf.cast(seg_label, tf.float32)), axis=-1)
 
     return all_in_one

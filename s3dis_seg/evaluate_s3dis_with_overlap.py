@@ -23,7 +23,7 @@ parser.add_argument('--config', default='s3dis_config', help='Model name [defaul
 parser.add_argument('--test_area', type=int, default=5, help='which Area is the test fold')
 parser.add_argument('--max_epoch', type=int, default=501, help='Epoch to run [default: 501]')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch Size during training [default: 16]')
-parser.add_argument('--model_name', default='model.ckpt', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--model_name', default='model.ckpt-500', help='model checkpoint file path [default: model.ckpt]')
 FLAGS = parser.parse_args()
 
 BATCH_SIZE = FLAGS.batch_size
@@ -31,7 +31,7 @@ MAX_EPOCH = FLAGS.max_epoch
 GPU_INDEX = FLAGS.gpu
 
 MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
-LOG_DIR = os.path.join(rootDir,'log_s3dis_Area_%d'%FLAGS.test_area)
+LOG_DIR = os.path.join(rootDir,'log_s3dis_0Area_%d'%FLAGS.test_area)
 
 resultsFolder = 'results'
 if not os.path.exists(os.path.join(LOG_DIR,resultsFolder)):
@@ -285,7 +285,7 @@ def eval_one_epoch(sess, ops, next_test_element):
                     inIdx = (batch_inner_label[b]==1)
                     batch_inner_covered[b] = np.sum(batch_sample_count[b][inIdx]>0)
 
-                cur_batch_input[0:bsize, ...] = batch_input
+                cur_batch_input[0:bsize, ...] = batch_input #(4,8192,6)
                 cur_batch_label[0:bsize, :] = batch_label
                 cur_batch_inner[0:bsize, :] = batch_inner
 
@@ -307,9 +307,8 @@ def eval_one_epoch(sess, ops, next_test_element):
                 temp_out_data = np.concatenate((padded_all[b,0:num,:],batch_pred_sum[b]), axis=1)
                 scene_name = BLOCK2SCENE[batch_idx*BATCH_SIZE+b][1]
                 block_name = '%s_%d.mat'%(scene_name,batch_idx*BATCH_SIZE+b)
-                print(os.path.join(LOG_DIR,resultsFolder,block_name))
-
-                sio.savemat(os.path.join(LOG_DIR,resultsFolder,block_name), {'data':temp_out_data})
+                # print(os.path.join(LOG_DIR,resultsFolder,block_name))
+                #sio.savemat(os.path.join(LOG_DIR,resultsFolder,block_name), {'data':temp_out_data})
 
                 pred_label = np.argmax(batch_pred_sum[b], 1)
                 inIdx = (batch_inner_label[b]==1)
@@ -334,7 +333,7 @@ def eval_one_epoch(sess, ops, next_test_element):
         class_acc[cat] = total_correct_class[l]/(float(total_seen_class[l]) +np.finfo(float).eps)
 
     log_string('eval mean loss: %f'%(loss_sum/batch_idx))
-    log_string('eval overall accuracy: %f'%(total_correct/float(total_seen)))
+    log_string('eval overall accuracy: %f'%(total_correct/float(total_seen))) # total_seen = 1700000
     log_string('eval avg class acc: %f'%(np.mean(list(class_acc.values()))))
     for i in range(len(classes)):
         cat = list(classes.keys())[list(classes.values()).index(i)]

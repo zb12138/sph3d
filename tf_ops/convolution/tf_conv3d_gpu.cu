@@ -7,9 +7,16 @@
 __global__ void depthwise_conv3d_forward(int B, int N, int M, int C, int r, int K, const int* nnIndex,
                                          const int* nnCount, const int* binIndex, const float* input,
                                          const float* filter, float* output)
+                                         // B batch size
+                                         // N number of input points
+                                         // M number of output points
+                                         // C number of input channels
+                                         // r depthwise channel multiplier
+                                         // K max number of neighbors sampled
 {
-    for(int i=blockIdx.x;i<B;i+=gridDim.x)
+    for(int i=blockIdx.x;i<B;i+=gridDim.x)//blockIdx the index of thread block
     {
+        //each thread calculates a channel per depthwise channel multiplier(cr)
         for(int j=blockIdx.y*blockDim.x+threadIdx.x;j<M*(C*r);j+=blockDim.x*gridDim.y)
         {
             int cout = j%(C*r); // output channel ID
@@ -110,6 +117,8 @@ void depthwiseConv3dLauncher(int B, int N, int M, int C, int r, int K, const int
 {
     depthwise_conv3d_forward<<<32,1024>>>(B, N, M, C, r, K, nnIndex, nnCount, binIndex,
                                           input, filter, output);
+
+                            // 32 block , a block has 1024 threads
 }
 
 void depthwiseConv3dGradLauncher(int B, int N, int M, int F, int C, int r, int K,

@@ -3,7 +3,7 @@ import os, sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/buildkernel'))
+sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/buildkernel2'))
 sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/convolution'))
 sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/nnquery'))
 sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/sampling'))

@@ -11,15 +11,16 @@ import sys
 baseDir = os.path.dirname(os.path.abspath(__file__))
 rootDir = os.path.dirname(baseDir)
 sys.path.append(baseDir)
+sys.path.append(rootDir)
 sys.path.append(os.path.join(rootDir, 'models'))
 sys.path.append(os.path.join(rootDir, 'utils'))
-import data_util
-
+import utils.data_util as data_util
+# from visualTool import pcshow
 parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
+parser.add_argument('--gpu', type=int, default=1, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_shapenet', help='Model name [default: SPH3D_shapenet]')
 parser.add_argument('--config', default='shapenet_config', help='Model name [default: shapenet_config]')
-parser.add_argument('--log_dir', default='log_shapenet', help='Log dir [default: log_shapenet]')
+parser.add_argument('--log_dir', default='log_shapenet_inv0', help='Log dir [default: log_shapenet]')
 parser.add_argument('--load_ckpt', '-l', help='Path to a check point file for load')
 parser.add_argument('--max_epoch', type=int, default=501, help='Epoch to run [default: 501]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
@@ -27,7 +28,7 @@ parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial 
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
 parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
 parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
-parser.add_argument('--shape_name', default='Bag', help='Which class to perform segment on')
+parser.add_argument('--shape_name', default='Motorbike', help='Which class to perform segment on')
 FLAGS = parser.parse_args()
 
 class_size = np.int32([2349,62,44,740,3054,55,628,312,1261,368,151,146,239,54,121,4423])
@@ -37,7 +38,7 @@ new_class_size = factor*class_size
 BATCH_SIZE = FLAGS.batch_size
 MAX_EPOCH = FLAGS.max_epoch
 BASE_LEARNING_RATE = FLAGS.learning_rate
-GPU_INDEX = FLAGS.gpu
+GPU_INDEX = '/gpu:'+str(FLAGS.gpu)
 MOMENTUM = FLAGS.momentum
 OPTIMIZER = FLAGS.optimizer
 DECAY_RATE = FLAGS.decay_rate
@@ -45,31 +46,42 @@ DECAY_RATE = FLAGS.decay_rate
 if not os.path.exists(FLAGS.log_dir): os.mkdir(FLAGS.log_dir)
 
 MODEL = importlib.import_module(FLAGS.model) # import network module
-MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
+# import models.SPH3D_shapenet as MODEL
 
+MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
+TRAIN_FILE =  os.path.join(rootDir, 'shapenet_seg', 'train_shapenet.py')
+CONFIG_FILE =  os.path.join(rootDir, 'shapenet_seg', FLAGS.config+'.py')
 LOG_DIR = os.path.join(rootDir,FLAGS.log_dir,FLAGS.shape_name)
 if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
+
 os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
-os.system('cp train_shapenet.py %s' % (LOG_DIR)) # bkp of train procedure
-os.system('cp %s.py %s' % (FLAGS.config, LOG_DIR)) # bkp of train procedure
+os.system('cp %s %s' % (TRAIN_FILE,LOG_DIR)) # bkp of train procedure
+os.system('cp  %s %s' % (CONFIG_FILE,LOG_DIR)) # bkp of config
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'a')
 LOG_FOUT.write(str(FLAGS)+'\n')
 
+BEST_REU = data_util.savebest(os.path.join(LOG_DIR, 'best_result.txt'))
+
 HOSTNAME = socket.gethostname()
 
-net_config = importlib.import_module(FLAGS.config)
+# net_config = importlib.import_module(FLAGS.config)
+import shapenet_seg.shapenet_config as net_config
+## seting
+LOADMODEL = net_config.LOADMODEL
 NUM_POINT = net_config.num_input
 INPUT_DIM = 3
 
-dataDir = os.path.join(rootDir, 'data/shapenet/%s'%FLAGS.shape_name)
+# dataDir = os.path.join(rootDir, 'data/shapenet/%s'%FLAGS.shape_name)
+dataDir = "/mnt/Cloud/fuchy/sph3d/data/shapenet/"+FLAGS.shape_name+"/"
+dataRootDir = "/mnt/Cloud/fuchy/sph3d/data/shapenet/"
 seg_info = [int(line.rstrip().split('\t')[-1])
-            for line in open(os.path.join(os.path.dirname(dataDir), 'class_info_all.txt'))]
+            for line in open(os.path.join(os.path.dirname(dataRootDir), 'class_info_all.txt'))]
 seg_info.append(50)
 shape_names = [line.rstrip().split('\t')[0]
-               for line in open(os.path.join(os.path.dirname(dataDir), 'class_info_all.txt'))]
+            for line in open(os.path.join(os.path.dirname(dataRootDir), 'class_info_all.txt'))]
 
-trainlist = [line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
-testlist =  [line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+trainlist = [dataRootDir+line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
+testlist =  [dataRootDir+line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
 trainLen = len(trainlist)
 testLen = len(testlist)
 print('trainlist:',len(trainlist))
@@ -136,8 +148,8 @@ def augment_fn(batch_xyz, batch_label):
     # perform augmentation on the first np.int32(augment_ratio*bsize) samples
     augSize = np.int32(1/3.0*bsize)
     augment_xyz = batch_xyz[0:augSize]
-    augment_xyz = data_util.rotate_point_cloud(augment_xyz)
-    augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
+    # augment_xyz = data_util.rotate_point_cloud(augment_xyz)
+    # augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
     augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
     augment_xyz = data_util.shift_point_cloud(augment_xyz)
     augment_xyz = data_util.jitter_point_cloud(augment_xyz)
@@ -163,7 +175,7 @@ def parse_fn(item):
     seg_label = tf.decode_raw(features['part_label'], tf.int32)
 
     xyz = tf.reshape(xyz,[-1,3])
-    seg_label = tf.reshape(seg_label, [-1, 1])
+    seg_label = tf.reshape(seg_label, [-1, 1])-seg_info[cls] #***************************#
     all_in_one = tf.concat((xyz, tf.cast(seg_label, tf.float32)), axis=-1)
 
     return all_in_one
@@ -190,7 +202,7 @@ def train():
     next_test_element = test_iterator.get_next()
     # =====================================The End=====================================
 
-    with tf.device('/gpu:0'):
+    with tf.device(GPU_INDEX):
         # =================================Define the Graph================================
         xyz_pl, label_pl = placeholder_inputs(BATCH_SIZE, NUM_POINT)
 
@@ -252,16 +264,34 @@ def train():
         sess.run(init)  # Init variables
 
         # Load the model
-        print(FLAGS.load_ckpt)
-        latest_ckpt = tf.train.latest_checkpoint(LOG_DIR)
-        if FLAGS.load_ckpt is not None:
+        # print(FLAGS.load_ckpt)
+        # latest_ckpt = tf.train.latest_checkpoint(LOG_DIR)
+        # if FLAGS.load_ckpt is not None:
+        #     saver.restore(sess, FLAGS.load_ckpt)
+        #     print('{}-Checkpoint loaded from {}!'.format(datetime.now(), FLAGS.load_ckpt))
+        # elif latest_ckpt:
+        #     print('{}-Found checkpoint {}'.format(datetime.now(), latest_ckpt))
+        #     saver.restore(sess, latest_ckpt)
+        #     print('{}-Checkpoint loaded from {} (Iter {})'.format(
+        #         datetime.now(), latest_ckpt, sess.run(global_step)))
+
+        # Load the model
+        if FLAGS.load_ckpt is not None and LOADMODEL:
+            FLAGS.load_ckpt= os.path.join(LOG_DIR,FLAGS.load_ckpt)
             saver.restore(sess, FLAGS.load_ckpt)
             print('{}-Checkpoint loaded from {}!'.format(datetime.now(), FLAGS.load_ckpt))
-        elif latest_ckpt:
-            print('{}-Found checkpoint {}'.format(datetime.now(), latest_ckpt))
-            saver.restore(sess, latest_ckpt)
-            print('{}-Checkpoint loaded from {} (Iter {})'.format(
-                datetime.now(), latest_ckpt, sess.run(global_step)))
+            latest_ckpt = FLAGS.load_ckpt
+        else:
+            latest_ckpt = None
+            # load or not
+            if(LOADMODEL):
+                latest_ckpt = tf.train.latest_checkpoint(LOG_DIR)
+                if latest_ckpt:
+                    print('{}-Found checkpoint {}'.format(datetime.now(), latest_ckpt))
+                    saver.restore(sess, latest_ckpt)
+                    print('{}-Checkpoint loaded from {} (Iter {})'.format(
+                        datetime.now(), latest_ckpt, sess.run(global_step)))
+
 
         ops = {'xyz_pl': xyz_pl,
                'label_pl': label_pl,
@@ -289,8 +319,15 @@ def train():
             log_string('---- EPOCH %03d EVALUATION ----' %(epoch))
 
             sess.run(test_iterator.initializer)
-            eval_one_epoch(sess, ops, next_test_element, test_writer)
+            r = eval_one_epoch(sess, ops, next_test_element, test_writer)
+            try:
+                os.system('rm '+ LOG_DIR+ '/model.ckpt-'+str(epoch-1)+'.*')
+            except:
+                pass
 
+            if(BEST_REU.fresh(r,'mIoU')):
+                save_path = saver.save(sess, os.path.join(LOG_DIR, "bestmodel.ckpt"))
+                log_string("Bast Model saved in file: %s" % save_path)
             save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"), global_step=epoch)
             log_string("Model saved in file: %s" % save_path)
     # =====================================The End=====================================
@@ -465,20 +502,23 @@ def eval_one_epoch(sess, ops, next_test_element, test_writer):
         except tf.errors.OutOfRangeError:
             break
 
+
+    eval_result ={}
+    eval_result['loss'] = loss_sum/batch_idx
+    eval_result['acc']  = total_correct/float(total_seen)
+    eval_result['macc'] = np.mean(np.array(total_correct_class)/np.array(total_seen_class, dtype=np.float))
+    eval_result['mIoU'] = np.mean(shape_ious)
     print(total_correct_class,total_seen_class)
-    log_string('eval mean loss: %f'%(loss_sum/batch_idx))
-    log_string('eval accuracy: %f'%(total_correct/float(total_seen)))
-    log_string('eval avg class acc: %f'%(
-        np.mean(np.array(total_correct_class)/np.array(total_seen_class, dtype=np.float))))
-    log_string('eval mIoU of %s:\t %f'%(shape_name, np.mean(shape_ious)))
+    log_string('eval mean loss: %f'%(eval_result['loss']))
+    log_string('eval accuracy: %f'%(eval_result['acc']))
+    log_string('eval avg class acc: %f'%(eval_result['macc']))
+    log_string('eval mIoU of %s:\t %f'%(shape_name, eval_result['mIoU']))
     log_string("testing one batch with augmentation require %.2f milliseconds"%(1000*test_time/batch_idx))
 
-    return
+    return eval_result
 
 
 if __name__ == "__main__":
     log_string('pid: %s'%(str(os.getpid())))
     train()
     LOG_FOUT.close()
-
-

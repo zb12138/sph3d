@@ -2,6 +2,9 @@
     Single-GPU training.
     Will use H5 dataset in default. If using normal, will shift to the normal dataset.
 '''
+# seting
+
+
 import argparse
 import time
 from datetime import datetime
@@ -12,29 +15,35 @@ import importlib
 import os
 import sys
 
+from tensorflow.python import debug as tf_debug
+
+# os.environ["CUDA_VISIBLE_DEVICES"]='0'
 baseDir = os.path.dirname(os.path.abspath(__file__))
 rootDir = os.path.dirname(baseDir)
-print(baseDir)
-print(rootDir)
+print("baseDir: "+baseDir)
+print("rootDir: "+rootDir)
 sys.path.append(baseDir)
-sys.path.append(os.path.join(rootDir, 'models'))
-sys.path.append(os.path.join(rootDir, 'utils'))
-import data_util
+sys.path.append(rootDir)
+# sys.path.append(os.path.join(rootDir, 'models'))
+# sys.path.append(os.path.join(rootDir, 'utils'))
+import utils.data_util as data_util
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--config', default='modelnet_config', help='Model name [default: modelnet_config]')
-parser.add_argument('--log_dir', default='log_modelnet', help='Log dir [default: log_modelnet]')
-parser.add_argument('--load_ckpt', '-l', help='Path to a check point file for load')
-parser.add_argument('--max_epoch', type=int, default=251, help='Epoch to run [default: 251]')
+parser.add_argument('--log_dir', default='log_modelnet_inv1', help='Log dir [default: log_modelnet]')
+# parser.add_argument('--load_ckpt', '-l', help='Path to a check point file for load')
+parser.add_argument('--load_ckpt',default='model.ckpt-78' , help='Path to a check point file for load')
+parser.add_argument('--max_epoch', type=int, default=499, help='Epoch to run [default: 251]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 16]')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
 parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
 parser.add_argument('--decay_step', type=int, default=250000, help='Decay step for lr decay [default: 250000]')
 parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
+
 FLAGS = parser.parse_args()
 
 BATCH_SIZE = FLAGS.batch_size
@@ -46,24 +55,29 @@ OPTIMIZER = FLAGS.optimizer
 DECAY_STEP = FLAGS.decay_step
 DECAY_RATE = FLAGS.decay_rate
 
-MODEL = importlib.import_module(FLAGS.model) # import network module
+# MODEL = importlib.import_module(FLAGS.model) # import network module
+import models.SPH3D_modelnet as MODEL
 MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
 LOG_DIR = os.path.join(rootDir,FLAGS.log_dir)
 if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
 os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
-os.system('cp train_modelnet.py %s' % (LOG_DIR)) # bkp of train procedure
-os.system('cp %s.py %s' % (FLAGS.config, LOG_DIR)) # bkp of train procedure
+os.system('cp %s//train_modelnet.py %s' % (baseDir,LOG_DIR)) # bkp of train procedure
+os.system('cp %s//%s.py %s' % (baseDir,FLAGS.config, LOG_DIR)) # bkp of train procedure
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'a')
 LOG_FOUT.write(str(FLAGS)+'\n')
 
+BEST_REU = data_util.savebest(os.path.join(LOG_DIR, 'best_result.txt')) #best model saving
 HOSTNAME = socket.gethostname()
 
-net_config = importlib.import_module(FLAGS.config)
-dataDir = os.path.join(rootDir, 'data/modelnet40')
-trainlist = [line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
-testlist = [line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+# net_config = importlib.import_module(FLAGS.config)
+import modelnet40_cls.modelnet_config as net_config
+
+dataDir = "/mnt/Cloud/fuchy/sph3d/data/modelnet40/"
+trainlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
+testlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
 NUM_POINT = net_config.num_input
 NUM_CLASSES = net_config.num_cls
+LOADMODEL = net_config.LOADMODEL
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -89,9 +103,11 @@ def placeholder_inputs(batch_size, num_point):
     return xyz_pl, label_pl
 
 
-def augment_fn(batch_xyz, batch_label, augment_ratio=0.5):
-    bsize, num_point, _ = batch_xyz.shape
+def augment_fn(batch_xyz, batch_label, augment_ratio=0.5,if_rotation = False,oridata = net_config.ORIDATA):
+    if oridata:
+        return batch_xyz, batch_label
 
+    bsize, num_point, _ = batch_xyz.shape
     # shuffle the orders of samples in a batch
     idx = np.arange(bsize)
     np.random.shuffle(idx)
@@ -105,8 +121,9 @@ def augment_fn(batch_xyz, batch_label, augment_ratio=0.5):
     augSize = np.int32(augment_ratio * bsize)
     augment_xyz = batch_xyz[0:augSize, :, :]
 
-    augment_xyz = data_util.rotate_point_cloud(augment_xyz)
-    augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
+    if if_rotation:
+        augment_xyz = data_util.rotate_point_cloud(augment_xyz)
+        augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz)
     augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
     augment_xyz = data_util.shift_point_cloud(augment_xyz)
 
@@ -131,7 +148,8 @@ def parse_fn(item):
 
 def input_fn(filelist, batch_size=16, buffer_size=10000):
     dataset = tf.data.TFRecordDataset(filelist)
-    dataset = dataset.shuffle(buffer_size=buffer_size)
+    if not net_config.ORIDATA:
+        dataset = dataset.shuffle(buffer_size=buffer_size)
     dataset = dataset.map(parse_fn, num_parallel_calls=4)
     dataset = dataset.batch(batch_size, drop_remainder=False)
 
@@ -157,7 +175,8 @@ def train():
         global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # Get model and loss
-        pred, end_points = MODEL.get_model(xyz_pl, training_pl, config=net_config)
+        pred, end_points = MODEL.get_model(xyz_pl, training_pl, config=net_config)#***get_model**
+        # print (np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
         MODEL.get_loss(pred, label_pl, end_points)
         if net_config.weight_decay is not None:
             reg_loss = tf.multiply(tf.losses.get_regularization_loss(), net_config.weight_decay, name='reg_loss')
@@ -211,17 +230,33 @@ def train():
         sess.run(init)  # Init variables
 
         # Load the model
-        print(FLAGS.load_ckpt)
-        if FLAGS.load_ckpt is not None:
-            saver.restore(sess, FLAGS.load_ckpt)
-            print('{}-Checkpoint loaded from {}!'.format(datetime.now(), FLAGS.load_ckpt))
+        if FLAGS.load_ckpt is not None and LOADMODEL:
+            FLAGS.load_ckpt= os.path.join(LOG_DIR,FLAGS.load_ckpt)
+            if(os._exists(FLAGS.load_ckpt)):
+                latest_ckpt = FLAGS.load_ckpt
+            else:
+                print("Model "+FLAGS.load_ckpt+" not found, auto load newest model")
+                ckpt = tf.train.get_checkpoint_state(LOG_DIR) #自动加载最新模型
+                if ckpt and ckpt.model_checkpoint_path:
+                    latest_ckpt = ckpt.model_checkpoint_path
+                else:
+                    latest_ckpt = None
+                    print("No model found and will be loaded")
         else:
-            latest_ckpt = tf.train.latest_checkpoint(LOG_DIR)
-            if latest_ckpt:
-                print('{}-Found checkpoint {}'.format(datetime.now(), latest_ckpt))
-                saver.restore(sess, latest_ckpt)
-                print('{}-Checkpoint loaded from {} (Iter {})'.format(
-                    datetime.now(), latest_ckpt, sess.run(global_step)))
+            latest_ckpt = None
+        if latest_ckpt:
+            checkpoint_epoch = int(latest_ckpt.split('-')[-1])+1
+            saver.restore(sess, latest_ckpt)
+            # print('{}-Checkpoint loaded from {}!,'.format(datetime.now(), FLAGS.load_ckpt))
+            print('{}-Checkpoint loaded from {} (Iter {})'.format(datetime.now(), latest_ckpt, sess.run(global_step)))
+            # latest_ckpt = tf.train.latest_checkpoint(LOG_DIR)
+            # if latest_ckpt:
+            #     print('{}-Found checkpoint {}'.format(datetime.now(), latest_ckpt))
+            #     saver.restore(sess, latest_ckpt)
+            #     print('{}-Checkpoint loaded from {} (Iter {})'.format(
+            #         datetime.now(), latest_ckpt, sess.run(global_step)))
+        else:
+            checkpoint_epoch = 0
 
         ops = {'xyz_pl': xyz_pl,
                'label_pl': label_pl,
@@ -232,12 +267,6 @@ def train():
                'merged': merged,
                'global_step': global_step,
                'end_points': end_points}
-
-        if latest_ckpt:
-            checkpoint_epoch = int(latest_ckpt.split('-')[-1])+1
-        else:
-            checkpoint_epoch = 0
-
         for epoch in range(checkpoint_epoch, MAX_EPOCH):
             log_string('**** EPOCH %03d ****' % (epoch))
             sys.stdout.flush()
@@ -245,20 +274,24 @@ def train():
             sess.run(train_iterator.initializer)
             train_one_epoch(sess, ops, next_train_element, train_writer)
 
-            log_string(str(datetime.now()))
-            log_string('---- EPOCH %03d EVALUATION ----' %(epoch))
+            # log_string(str(datetime.now()))
+            # log_string('---- EPOCH %03d EVALUATION ----' %(epoch))
 
             sess.run(test_iterator.initializer)
-            eval_one_epoch(sess, ops, next_test_element, test_writer)
-
+            if(net_config.IF_EVAL(epoch)):
+                r = eval_one_epoch(sess, ops, next_test_element, test_writer)
+                os.system('rm '+ LOG_DIR+ '/model.ckpt-'+str(epoch-1)+'.*')
+                if(BEST_REU.fresh(r,'acc')):
+                    save_path = saver.save(sess, os.path.join(LOG_DIR, "bestmodel.ckpt"))
+                    log_string("Best Model saved in file: %s" % save_path)
             save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"), global_step=epoch)
-            log_string("Model saved in file: %s" % save_path)
+            # log_string("Model saved in file: %s" % save_path)
     # =====================================The End=====================================
 
 
 def train_one_epoch(sess, ops, next_train_element, train_writer):
     """ ops: dict mapping from string to tf ops """
-    log_string(str(datetime.now()))
+    # log_string(str(datetime.now()))
 
     # Make sure batch data is of same size
     cur_batch_xyz = np.zeros((BATCH_SIZE, NUM_POINT, 3))
@@ -276,8 +309,7 @@ def train_one_epoch(sess, ops, next_train_element, train_writer):
             bsize = batch_xyz.shape[0]
 
             batch_xyz = batch_xyz[:, :, [0, 2, 1]]  # xzy to xyz
-            batch_xyz, batch_label = augment_fn(batch_xyz, batch_label,
-                                                augment_ratio=0.5)  # training augmentation on the fly
+            batch_xyz, batch_label = augment_fn(batch_xyz, batch_label,0.5,net_config.TRAIN_RATATION)  # training augmentation on the fly
 
             cur_batch_xyz[0:bsize,...] = batch_xyz
             cur_batch_label[0:bsize] = batch_label
@@ -297,18 +329,21 @@ def train_one_epoch(sess, ops, next_train_element, train_writer):
             total_correct += correct
             total_seen += bsize
             loss_sum += loss_val
-            if (batch_idx+1)%50 == 0:
-                log_string(' ---- batch: %03d ----' % (batch_idx+1))
-                log_string('mean loss: %f' % (loss_sum / 50))
-                log_string('accuracy: %f' % (total_correct / float(total_seen)))
-                total_correct = 0
-                total_seen = 0
-                loss_sum = 0
+            # if (batch_idx+1)%50 == 0:
+            #     log_string(' ---- batch: %03d ----' % (batch_idx+1))
+            #     log_string('mean loss: %f' % (loss_sum / 50))
+            #     log_string('accuracy: %f' % (total_correct / float(total_seen)))
+            #     total_correct = 0
+            #     total_seen = 0
+            #     loss_sum = 0
             batch_idx += 1
         except tf.errors.OutOfRangeError:
+            # log_string(' ---- batch: %03d ----' % (batch_idx))
+            log_string('>train accuracy:        %f' % (total_correct / float(total_seen)))
+            log_string('>train mean loss: %f' % (loss_sum / batch_idx))
             break
 
-    log_string("training one batch require %.2f milliseconds" %(1000*train_time/batch_idx))
+    #log_string("training one batch require %.2f milliseconds" %(1000*train_time/batch_idx))
 
     return
 
@@ -335,6 +370,10 @@ def eval_one_epoch(sess, ops, next_test_element, test_writer):
             bsize = batch_xyz.shape[0]
 
             batch_xyz = batch_xyz[:, :, [0, 2, 1]]  # xzy to xyz
+
+            batch_xyz, batch_label = augment_fn(batch_xyz, batch_label,
+                                                0.5,net_config.EVAL_RATATION)  # training augmentation on the fly
+                                                            
             cur_batch_xyz[0:bsize, ...] = batch_xyz
             cur_batch_label[0:bsize] = batch_label
 
@@ -360,14 +399,15 @@ def eval_one_epoch(sess, ops, next_test_element, test_writer):
                 total_correct_class[l] += (pred_val[i] == l)
         except tf.errors.OutOfRangeError:
             break
+    log_string('*eval accuracy:        %f'% (total_correct / float(total_seen)))
+    log_string('*eval mean loss: %f' % (loss_sum / float(batch_idx)))
+    #log_string('*eval avg class acc: %f' % (np.mean(np.array(total_correct_class)/np.array(total_seen_class,dtype=np.float))))
+    #log_string("testing one batch require %.2f milliseconds" % (1000 * test_time / batch_idx))
 
-    log_string('eval mean loss: %f' % (loss_sum / float(batch_idx)))
-    log_string('eval accuracy: %f'% (total_correct / float(total_seen)))
-    log_string('eval avg class acc: %f' % (np.mean(np.array(total_correct_class)/np.array(total_seen_class,dtype=np.float))))
-
-    log_string("testing one batch require %.2f milliseconds" % (1000 * test_time / batch_idx))
-
-    return
+    eval_result ={}
+    eval_result['loss'] = (loss_sum / float(batch_idx))
+    eval_result['acc']  = total_correct / float(total_seen)
+    return eval_result
 
 
 if __name__ == "__main__":

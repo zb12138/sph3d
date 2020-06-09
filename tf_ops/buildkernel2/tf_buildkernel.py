@@ -30,7 +30,3 @@ def spherical_kernel(database,
     query = query[:, :, 0:3] #(x,y,z)
     return buildkernel_module.spherical_kernel(database, query, nn_index, nn_count, nn_dist, radius, n, p, q)
 ops.NoGradient('SphericalKernel')
-
-
-
-

@@ -45,5 +45,5 @@ def random_sample(neursize, database):
     # NOTE: randomSampling applies a random sampling with uniform probability
     batch_size = tf.shape(database)[0]
     num_points = tf.shape(database)[1]
-    neuron_index = tf.random.uniform((batch_size, neursize), minval=0, maxval=num_points, dtype=tf.int32)
+    neuron_index = tf.random_uniform([batch_size, neursize], minval=0, maxval=num_points, dtype=tf.int32)
     return neuron_index

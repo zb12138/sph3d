@@ -1,13 +1,12 @@
 import tensorflow as tf
 import sys
 import os
-ROOT_DIR = '/home/chunyang/workspace/SPH3D/sph3d/'
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
-# sys.path.append(os.path.join(BASE_DIR, '../'))
-sys.path.append(ROOT_DIR)
-# sys.path.append(os.path.join(BASE_DIR, '../utils'))
-import utils.sph3gcn_util as s3g_util
+# sys.path.append(os.path.dirname(BASE_DIR))
+sys.path.append(os.path.join(BASE_DIR, '../utils'))
+import utils.sph3gcn_util2 as s3g_util
 
 
 def normalize_xyz(points):
@@ -37,30 +36,38 @@ def get_model(points, num_cls, is_training, config=None):
     xyz = points[:, :, 0:3]
 
     reuse = None
-    net = points
-    net = s3g_util.pointwise_conv3d(net, config.mlp, 'mlp1',
-                                    weight_decay=config.weight_decay,
-                                    with_bn=config.with_bn, with_bias=config.with_bias,
-                                    reuse=reuse, is_training=is_training)
+    # net = points
+    # net = s3g_util.pointwise_conv3d(net, config.mlp, 'mlp1',
+    #                                 weight_decay=config.weight_decay,
+    #                                 with_bn=config.with_bn, with_bias=config.with_bias,
+    #                                 reuse=reuse, is_training=is_training)
 
     xyz_layers = []
     encoder = []
-    encoder.append(net)
+    # encoder.append(net)
     xyz_layers.append(xyz)
     # ===============================================Encoder================================================
     for l in range(len(config.radius)):
         intra_idx, intra_cnt, \
         intra_dst, indices = s3g_util.build_graph(xyz, config.radius[l], config.nn_uplimit[l],
-                                                        config.num_sample[l], 
-                                                        #curv=None,
-                                                        # nnsearch=config.nnsearch, 
-                                                        # multi_scale=config.multiscale,
-                                                        # keypt_type=config.keypoint, 
-                                                        sample_method=config.sample
-                                                        )
-        filt_idx = s3g_util.spherical_kernel(xyz, xyz, intra_idx, intra_cnt,
+                                                  config.num_sample[l], 
+                                                  #curv=None,
+                                                  #nnsearch=config.nnsearch, 
+                                                  #multi_scale=config.multiscale,
+                                                  #keypt_type=config.keypoint, 
+                                                  sample_method=config.sample)
+        filt_idx,rotateXyz = s3g_util.spherical_kernel(xyz, xyz, intra_idx, intra_cnt,
                                                    intra_dst, config.radius[l],
                                                    kernel=config.kernel)
+        if(l==0):
+            kernel = s3g_util._variable_with_weight_decay('weights',
+                                    shape=[1,1,3,1], stddev=1e-3, with_decay=None)
+            convRXyz = tf.nn.conv2d(rotateXyz,kernel,[1,1,1,1],"VALID")
+            # s3g_util.conv2d(rotateXyz,num_output_channels=1,kernel_size=[1,1],scope='convRG',
+                                                    # padding="VALID",bn=False)
+            net = tf.squeeze(convRXyz,name='FconvRG')
+
+            encoder.append(net)
         net = _separable_conv3d_block(net, config.channels[l], config.binSize, intra_idx, intra_cnt,
                                       filt_idx, 'conv'+str(l+1), config.multiplier[l], reuse=reuse,
                                       weight_decay=config.weight_decay, with_bn=config.with_bn,
@@ -95,9 +102,9 @@ def get_model(points, num_cls, is_training, config=None):
         inter_idx, inter_cnt, inter_dst = s3g_util.build_graph_deconv(xyz, xyz_unpool,
                                                                       config.radius[l],
                                                                       config.nn_uplimit[l]
-                                                                    #   nnsearch=config.nnsearch
+                                                                      #nnsearch=config.nnsearch
                                                                       )
-        filt_idx = s3g_util.spherical_kernel(xyz, xyz, intra_idx, intra_cnt,
+        filt_idx,_ = s3g_util.spherical_kernel(xyz, xyz, intra_idx, intra_cnt,
                                                    intra_dst, config.radius[l], kernel=config.kernel)
         net = _separable_conv3d_block(net, config.channels[l], config.binSize, intra_idx, intra_cnt,
                                       filt_idx, 'deconv'+str(l+1), config.multiplier[l], reuse=reuse,

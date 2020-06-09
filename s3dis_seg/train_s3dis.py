@@ -7,6 +7,8 @@ import socket
 import importlib
 import os
 import sys
+# import tensorflow.contrib.eager as tfe
+# tfe.enable_eager_execution()
 
 baseDir = os.path.dirname(os.path.abspath(__file__))
 rootDir = os.path.dirname(baseDir)
@@ -41,11 +43,14 @@ DECAY_RATE = FLAGS.decay_rate
 
 MODEL = importlib.import_module(FLAGS.model) # import network module
 MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
-LOG_DIR = os.path.join(rootDir,'log_s3dis_Area_%d'%FLAGS.test_area)
+LOG_DIR = os.path.join(rootDir,'log_s3dis_0Area_%d'%FLAGS.test_area)
 if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
 os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
-os.system('cp train_s3dis.py %s' % (LOG_DIR)) # bkp of train procedure
-os.system('cp %s.py %s' % (FLAGS.config, LOG_DIR)) # bkp of train procedure
+os.system('cp %s//train_s3dis.py %s' % (baseDir,LOG_DIR)) # bkp of train procedure
+os.system('cp %s//%s.py %s' % (baseDir,FLAGS.config, LOG_DIR)) # bkp of train procedure
+# os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
+# os.system('cp train_s3dis.py %s' % (LOG_DIR)) # bkp of train procedure
+# os.system('cp %s.py %s' % (FLAGS.config, LOG_DIR)) # bkp of train procedure
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'a')
 LOG_FOUT.write(str(FLAGS)+'\n')
 
@@ -191,6 +196,7 @@ def train():
     testset = input_fn(testlist, BATCH_SIZE, 10000)
     test_iterator = testset.make_initializable_iterator()
     next_test_element = test_iterator.get_next()
+
     # =====================================The End=====================================
 
     with tf.device('/gpu:0'):

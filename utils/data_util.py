@@ -232,3 +232,53 @@ def rot_z(angle):
     return R
 
 
+class savebest:
+    BEST_DIR = {}
+    BEST_PATH = 0
+    def __init__(self,BEST_PATH):
+        try:
+            self.BEST_PATH = BEST_PATH
+            if not os.path.exists(os.path.join(os.path.dirname(BEST_PATH), "bestmodel.ckpt.index")):
+                print("best model not found")
+                return
+            f = open(BEST_PATH, 'r')
+            self.BEST_DIR = eval(f.read())
+            f.close()
+        except:
+            self.BEST_DIR = {}
+    def fresh(self,EVAL_DIR,key):
+        isbest = False
+        if(self.BEST_DIR=={} or self.BEST_DIR[key]<EVAL_DIR[key]):
+            self.BEST_DIR = EVAL_DIR
+            isbest = True
+        b = open(self.BEST_PATH, 'w')
+        b.write(str(self.BEST_DIR))
+        b.close()
+        return isbest
+
+def rotate_point_cloud_so3(batch_data):
+    """ Randomly rotate the point clouds to augument the dataset
+        rotation is per shape based along up direction
+        Input:
+          BxNx3 array, original batch of point clouds
+        Return:
+          BxNx3 array, rotated batch of point clouds
+    """
+    rotated_data = np.zeros(batch_data.shape, dtype=np.float32)
+    for k in range(batch_data.shape[0]):
+        rotation_angle_A = np.random.uniform() * 2 * np.pi
+        rotation_angle_B = np.random.uniform() * 2 * np.pi
+        rotation_angle_C = np.random.uniform() * 2 * np.pi
+
+        cosval_A = np.cos(rotation_angle_A)
+        sinval_A = np.sin(rotation_angle_A)
+        cosval_B = np.cos(rotation_angle_B)
+        sinval_B = np.sin(rotation_angle_B)
+        cosval_C = np.cos(rotation_angle_C)
+        sinval_C = np.sin(rotation_angle_C)
+        rotation_matrix = np.array([[cosval_B*cosval_C, -cosval_B*sinval_C, sinval_B],
+                                    [sinval_A*sinval_B*cosval_C+cosval_A*sinval_C, -sinval_A*sinval_B*sinval_C+cosval_A*cosval_C, -sinval_A*cosval_B],
+                                    [-cosval_A*sinval_B*cosval_C+sinval_A*sinval_C, cosval_A*sinval_B*sinval_C+sinval_A*cosval_C, cosval_A*cosval_B]])
+        shape_pc = batch_data[k, ...]
+        rotated_data[k, ...] = np.dot(shape_pc.reshape((-1, 3)), rotation_matrix)
+    return rotated_data

@@ -6,7 +6,8 @@ import json
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_path', required=True, help='path to the directory of the point cloud dataset')
+# parser.add_argument('--data_path', required=True, help='path to the directory of the point cloud dataset')
+parser.add_argument('--data_path', default="/mnt/Cloud/fuchy/shapenetcore_partanno_segmentation_benchmark_v0_normal", help='path to the directory of the point cloud dataset')
 INFO = parser.parse_args()
 dataDir = INFO.data_path
 print(INFO,dataDir)
@@ -54,14 +55,15 @@ def make_tfrecord_seg(dataDir, filelist, store_root="", debug=True):
     for filepath in dataset:
         _, folder, filename = filepath.split('/')
         filepath = os.path.join(dataDir, folder, filename+'.txt')
-        data = np.loadtxt(filepath, dtype=np.float32, delimiter=',')
+        data = np.loadtxt(filepath, dtype=np.float32, delimiter=' ')
 
-        assert (data.shape[1]==5)  # the input point cloud has xyz+normals
+        assert (data.shape[1]==7)  # the input point cloud has xyz+normals+label
 
         xyz = data[:, 0:3]
         xyz = xyz[:,[0,2,1]]
-        part_label = np.int32(data[:, -2]) - 1  # to make index start from 0
-        seg_label = np.int32(data[:, -1]) - 1 # to make index start from 0
+        part_label = np.int32(data[:, -1])  # to make index start from 0
+        # seg_label = np.int32(data[:, -1]) # to make index start from 0
+        norm = data[:, 3:6]
         cls_label = class_folders.index(folder)
         cls_name = class_names[cls_label]
 
@@ -103,13 +105,14 @@ def make_tfrecord_seg(dataDir, filelist, store_root="", debug=True):
         else:
             filename = os.path.join(store_folder, '%s_%s%d.tfrecord'%(class_names[cls_label],
                                                                       phase, num[cls_label]))
-            writer = tf.io.TFRecordWriter(filename)
-
+            writer = tf.python_io.TFRecordWriter(filename)
+            norm_raw = norm.tostring()
             xyz_raw = xyz.tostring()
             part_label_raw = part_label.tostring()
-            seg_label_raw = seg_label.tostring()
+            # seg_label_raw = seg_label.tostring()
             example = tf.train.Example(features=tf.train.Features(feature={
-                'seg_label':_bytes_feature(seg_label_raw),
+                # 'seg_label':_bytes_feature(seg_label_raw),
+                'norm':_bytes_feature(norm_raw),
                 'part_label':_bytes_feature(part_label_raw),
                 'cls_label':_int64_feature(cls_label),
                 'xyz_raw':_bytes_feature(xyz_raw)}))
