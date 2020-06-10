@@ -17,7 +17,7 @@ import sys
 
 from tensorflow.python import debug as tf_debug
 
-# os.environ["CUDA_VISIBLE_DEVICES"]='0'
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
 baseDir = os.path.dirname(os.path.abspath(__file__))
 rootDir = os.path.dirname(baseDir)
 print("baseDir: "+baseDir)
@@ -72,9 +72,10 @@ HOSTNAME = socket.gethostname()
 # net_config = importlib.import_module(FLAGS.config)
 import modelnet40_cls.modelnet_config as net_config
 
-dataDir = "/mnt/Cloud/fuchy/sph3d/data/modelnet40/"
-trainlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
-testlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+dataDir = net_config.dataDir
+
+trainlist = [os.path.join(dataDir,line.rstrip()) for line in open(os.path.join(dataDir, 'train_files.txt'))]
+testlist = [os.path.join(dataDir,line.rstrip()) for line in open(os.path.join(dataDir, 'test_files.txt'))]
 NUM_POINT = net_config.num_input
 NUM_CLASSES = net_config.num_cls
 LOADMODEL = net_config.LOADMODEL
@@ -236,7 +237,7 @@ def train():
                 latest_ckpt = FLAGS.load_ckpt
             else:
                 print("Model "+FLAGS.load_ckpt+" not found, auto load newest model")
-                ckpt = tf.train.get_checkpoint_state(LOG_DIR) #自动加载最新模型
+                ckpt = tf.train.get_checkpoint_state(LOG_DIR) #auto load newest model
                 if ckpt and ckpt.model_checkpoint_path:
                     latest_ckpt = ckpt.model_checkpoint_path
                 else:

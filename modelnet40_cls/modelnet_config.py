@@ -1,5 +1,8 @@
 import numpy as np
 
+
+dataDir = "/home/xiaom/workspace/data/modelnet40"
+
 num_input = 2048
 num_cls = 40
 
