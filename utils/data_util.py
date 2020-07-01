@@ -239,7 +239,7 @@ class savebest:
         try:
             self.BEST_PATH = BEST_PATH
             if not os.path.exists(os.path.join(os.path.dirname(BEST_PATH), "bestmodel.ckpt.index")):
-                print("best model not found")
+                print("I: best model not found")
                 return
             f = open(BEST_PATH, 'r')
             self.BEST_DIR = eval(f.read())

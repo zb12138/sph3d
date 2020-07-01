@@ -1,3 +1,14 @@
+# seting
+LOADMODEL = True # if LOADMODEL = False and COPYCODE = True will copy the code
+ORIDATA = False
+TRAIN_RATATION = False
+EVAL_RATATION = False
+EVAL_STEP = 1
+WEIGHT_DECAY = 0.0005
+DATADIR = "/home/xiaom/workspace/data/shapenet/"
+COPYCODE = False
+ROOTDIR = "/home/xiaom/workspace/sph3dR/"
+
 import argparse
 import time
 from datetime import datetime
@@ -8,9 +19,8 @@ import importlib
 import os
 import sys
 
-baseDir = os.path.dirname(os.path.abspath(__file__))
-rootDir = os.path.dirname(baseDir)
-sys.path.append(baseDir)
+rootDir = ROOTDIR
+# sys.path.append(rootDir+)
 sys.path.append(rootDir)
 sys.path.append(os.path.join(rootDir, 'models'))
 sys.path.append(os.path.join(rootDir, 'utils'))
@@ -43,45 +53,54 @@ MOMENTUM = FLAGS.momentum
 OPTIMIZER = FLAGS.optimizer
 DECAY_RATE = FLAGS.decay_rate
 
-if not os.path.exists(FLAGS.log_dir): os.mkdir(FLAGS.log_dir)
-
-MODEL = importlib.import_module(FLAGS.model) # import network module
-# import models.SPH3D_shapenet as MODEL
-
+if not os.path.exists(FLAGS.log_dir): 
+    os.mkdir(FLAGS.log_dir)
+    if LOADMODEL:
+        LOADMODEL = False
+        print("W: no logDir found and LOADMODEL switch to False")
+sys.path.append(FLAGS.log_dir)
+LOG_DIR = os.path.join(rootDir,FLAGS.log_dir,FLAGS.shape_name)
+if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
 MODEL_FILE = os.path.join(rootDir, 'models', FLAGS.model+'.py')
 TRAIN_FILE =  os.path.join(rootDir, 'shapenet_seg', 'train_shapenet.py')
 CONFIG_FILE =  os.path.join(rootDir, 'shapenet_seg', FLAGS.config+'.py')
-LOG_DIR = os.path.join(rootDir,FLAGS.log_dir,FLAGS.shape_name)
-if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
-
-os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
+if not LOADMODEL and COPYCODE:
+    os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
+    os.system('cp  %s %s' % (CONFIG_FILE,LOG_DIR)) # bkp of config
 os.system('cp %s %s' % (TRAIN_FILE,LOG_DIR)) # bkp of train procedure
-os.system('cp  %s %s' % (CONFIG_FILE,LOG_DIR)) # bkp of config
+
+# import network module
+# MODEL = importlib.import_module(FLAGS.model) 
+# import models.SPH3D_shapenet as MODEL
+
+# logwriter and modelsaver
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'a')
 LOG_FOUT.write(str(FLAGS)+'\n')
-
 BEST_REU = data_util.savebest(os.path.join(LOG_DIR, 'best_result.txt'))
 
-HOSTNAME = socket.gethostname()
-
 # net_config = importlib.import_module(FLAGS.config)
-import shapenet_seg.shapenet_config as net_config
-## seting
-LOADMODEL = net_config.LOADMODEL
+# import shapenet_seg.shapenet_config as net_config
+spec = importlib.util.spec_from_file_location('',os.path.join(logDir,FLAGS.config+'.py'))
+net_config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(net_config)
+spec = importlib.util.spec_from_file_location('',os.path.join(logDir,FLAGS.model+'.py'))
+MODEL = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(MODEL)
+
 NUM_POINT = net_config.num_input
 INPUT_DIM = 3
-
+net_config.weight_decay = WEIGHT_DECAY
 # dataDir = os.path.join(rootDir, 'data/shapenet/%s'%FLAGS.shape_name)
-dataDir = "/mnt/Cloud/fuchy/sph3d/data/shapenet/"+FLAGS.shape_name+"/"
-dataRootDir = "/mnt/Cloud/fuchy/sph3d/data/shapenet/"
+dataRootDir =  DATADIR 
+dataDir = dataRootDir + FLAGS.shape_name+"/"
 seg_info = [int(line.rstrip().split('\t')[-1])
-            for line in open(os.path.join(os.path.dirname(dataRootDir), 'class_info_all.txt'))]
+            for line in open(os.path.join((dataRootDir), 'class_info_all.txt'))]
 seg_info.append(50)
 shape_names = [line.rstrip().split('\t')[0]
-            for line in open(os.path.join(os.path.dirname(dataRootDir), 'class_info_all.txt'))]
+            for line in open(os.path.join((dataRootDir), 'class_info_all.txt'))]
 
-trainlist = [dataRootDir+line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
-testlist =  [dataRootDir+line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+trainlist = [dataDir+line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
+testlist =  [dataDir+line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
 trainLen = len(trainlist)
 testLen = len(testlist)
 print('trainlist:',len(trainlist))

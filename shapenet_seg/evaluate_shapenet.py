@@ -18,11 +18,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_shapenet', help='Model name [default: SPH3D_shapenet]')
 parser.add_argument('--config', default='shapenet_config', help='Model name [default: shapenet_config]')
-parser.add_argument('--log_dir', default='log_shapenet', help='Log dir [default: log_shapenet]')
+parser.add_argument('--log_dir', default='log_shapenet_inv0', help='Log dir [default: log_shapenet]')
 parser.add_argument('--max_epoch', type=int, default=501, help='Epoch to run [default: 501]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
-parser.add_argument('--model_name', default='model.ckpt-500', help='model checkpoint file path [default: model.ckpt]')
-parser.add_argument('--shape_name', default='Airplane', help='Which class to perform segment on')
+# parser.add_argument('--model_name', default='model.ckpt-500', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--model_name', default='bestmodel.ckpt', help='model checkpoint file path [default: model.ckpt]')
+parser.add_argument('--shape_name', default='Motorbike', help='Which class to perform segment on')
 FLAGS = parser.parse_args()
 
 BATCH_SIZE = FLAGS.batch_size
@@ -53,16 +54,16 @@ if not os.path.exists(resultDir):
 
 NUM_POINT = net_config.num_input
 INPUT_DIM = 3
-
-dataDir = os.path.join(rootDir, 'data/shapenet/%s'%FLAGS.shape_name)
+dataRootDir = "/home/xiaom/workspace/data/shapenet/"
+dataDir = dataRootDir + FLAGS.shape_name+"/"
 seg_info = [int(line.rstrip().split('\t')[-1])
-            for line in open(os.path.join(os.path.dirname(dataDir), 'class_info_all.txt'))]
+            for line in open(os.path.join((dataRootDir), 'class_info_all.txt'))]
 seg_info.append(50)
 shape_names = [line.rstrip().split('\t')[0]
-               for line in open(os.path.join(os.path.dirname(dataDir), 'class_info_all.txt'))]
+            for line in open(os.path.join((dataRootDir), 'class_info_all.txt'))]
 
-trainlist = [line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
-testlist =  [line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+trainlist = [dataDir+line.rstrip() for line in open(os.path.join(dataDir, 'train_files.txt'))]
+testlist =  [dataDir+line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
 
 shape_name = FLAGS.shape_name
 cls = shape_names.index(shape_name)
@@ -82,13 +83,6 @@ def placeholder_inputs(batch_size, num_point):
 
     return xyz_pl, label_pl
 
-# def augment_fn(batch_xyz):
-#     # perform augmentation on the first np.int32(augment_ratio*bsize) samples
-#     augment_xyz = data_util.rotate_point_cloud(batch_xyz)
-#     augment_xyz = data_util.rotate_perturbation_point_cloud(augment_xyz,angle_sigma=3.14,angle_clip=3.14)
-#     # augment_xyz = data_util.random_scale_point_cloud(augment_xyz)
-#     # augment_xyz = data_util.shift_point_cloud(augment_xyz)
-#     return augment_xyz
 
 def augment_fn(batch_xyz):
     augment_xyz = batch_xyz

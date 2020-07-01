@@ -1,11 +1,9 @@
 import tensorflow as tf
 import sys
 import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(BASE_DIR, '../utils'))
-sys.path.append(os.path.join(BASE_DIR, '../'))
+ROOTDIR = "/home/xiaom/workspace/sph3dR/"
+sys.path.append(ROOTDIR)
+sys.path.append(os.path.join(ROOTDIR, 'utils'))
 import utils.sph3gcn_util2 as s3g_util
 import pca
 
@@ -88,18 +86,34 @@ def get_model(points, is_training, config=None):
                                              intra_dst, config.radius[l],
                                              kernel=config.kernel)#(32,2048,64) (32,512,64)
         if l==0:
-            # net = xyzinr
-            net = tf.cast(filt_idx,tf.float32)
+            net = tf.concat([xyzinr, tf.cast(filt_idx,tf.float32)], axis=-1)
         if config.use_raw and l>0: #会循环加入
-            net = tf.concat([net, tf.cast(filt_idx,tf.float32)], axis=-1)
+            with tf.variable_scope("conv2_"+str(l+1)):
+                conv2_weights = tf.get_variable(
+                    "weight", [1, rotateXyz.shape[2], rotateXyz.shape[3], rotateXyz.shape[3]],
+                    initializer=tf.truncated_normal_initializer(stddev=0.1))
+                conv2_biases = tf.get_variable("bias", [rotateXyz.shape[3]], initializer=tf.constant_initializer(0.0))
+                conv2 = tf.nn.conv2d(rotateXyz, conv2_weights, strides=[1, 1, rotateXyz.shape[2], 1], padding='VALID')
+                relu2 =tf.squeeze(tf.nn.relu(tf.nn.bias_add(conv2, conv2_biases)))
+            net = tf.concat([net,relu2,tf.cast(filt_idx,tf.float32)], axis=-1)
  
         # 把每个点进行球卷积（2次，以multiplier参数的分离卷积实现）
-        # (32,N,input_channels) -> (32,N,output_channels)
-        net = _separable_conv3d_block(net, config.channels[l], config.binSize, intra_idx, intra_cnt,
-                                      filt_idx, 'conv'+str(l+1), config.multiplier[l], reuse=reuse,
-                                      weight_decay=config.weight_decay, with_bn=config.with_bn,
-                                      with_bias=config.with_bias, is_training=is_training)
+        # (32,N,input_channels) -> (32,N,output_channels) net(32,2048,64)->net(32,2048,128)
+        # net = _separable_conv3d_block(net, config.channels[l], config.binSize, intra_idx, intra_cnt,
+        #                               filt_idx, 'conv'+str(l+1), config.multiplier[l], reuse=reuse,
+        #                               weight_decay=config.weight_decay, with_bn=config.with_bn,
+        #                               with_bias=config.with_bias, is_training=is_training)
 
+        weight = s3g_util.pointwise_conv3d(net, net.shape[2], 'conv'+str(l+1),
+                                        weight_decay=config.weight_decay,
+                                        with_bn=config.with_bn, with_bias=config.with_bias,
+                                        reuse=reuse, is_training=is_training)
+        net = weight*net
+        net = s3g_util.pointwise_conv3d(net,config.channels[l], 'conv2'+str(l+1),
+                                weight_decay=config.weight_decay,
+                                with_bn=config.with_bn, with_bias=config.with_bias,
+                                reuse=reuse, is_training=is_training)
+                            
         if config.num_sample[l]>1:
             # ==================================gather_nd====================================
             # xyzinr = tf.gather_nd(xyzinr, indices)
@@ -108,10 +122,12 @@ def get_model(points, is_training, config=None):
             inter_cnt = tf.gather_nd(intra_cnt, indices) # intar_idx/inter_idx 同时作为层内和层间邻域
             # inter_dst = tf.gather_nd(intra_dst, indices)
         # =====================================END=======================================
-        # 从被FPS选中的点的邻域中选择最大/均值作为该点输出(32,1024,,64)->(32,512,64)
+        # 从被FPS选中的点的邻域中选择最大/均值作为该点输出(32,2048,128)->(32,1024,128)
         net = s3g_util.pool3d(net, inter_idx, inter_cnt,method=config.pool_method, scope='pool'+str(l+1))
+        
+        net = tf.nn.elu(net)
 
-        global_maxpool = tf.reduce_max(net, axis=1, keepdims=True) # 排列不变性(32,1,64)
+        global_maxpool = tf.reduce_max(net, axis=1, keepdims=True) # 排列不变性(32,1,128)
         global_feat.append(global_maxpool) # 将池化后的特征均值作为本层的全局特征(32,1,channels)
     # =============================global feature extraction in the final layer=============================
     global_radius = 100.0 # global_radius(>=2.0) should connect all points to each point in the cloud(no 64 limit)
@@ -135,7 +151,7 @@ def get_model(points, is_training, config=None):
     global_feat.append(net)
     # global_feat.append(convRXyz)
 
-    net = tf.concat(global_feat,axis=2) #(32,1,64) (32,1,128) (32,1,512) -> (32,1,704)
+    net = tf.concat(global_feat,axis=2) # (32,1,128) (32,1,512) -> (32,1,640)
     # =====================================================================================================
     # MLP on global point cloud vector
     net = tf.reshape(net, [batch_size, -1])

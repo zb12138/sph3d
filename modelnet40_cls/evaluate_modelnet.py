@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch Size during training [default: 16]')
-parser.add_argument('--log_dir', default='log_modelnet_inv0', help='Log dir [default: log]')
+parser.add_argument('--log_dir', default='log_modelnet_inv2', help='Log dir [default: log]')
 # parser.add_argument('--model_name', default='model.ckpt-228', help='model checkpoint file path [default: model.ckpt]')
 parser.add_argument('--model_name', default='bestmodel.ckpt', help='model checkpoint file path [default: model.ckpt]')
 parser.add_argument('--num_votes', type=int, default=1, help='Aggregate classification scores from multiple rotations [default: 1]')
@@ -57,10 +57,11 @@ spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,'modelnet_
 net_config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(net_config)
 
-dataDir = "/mnt/Cloud/fuchy/sph3d/data/modelnet40/"
-testlist = [dataDir + line.rstrip() for line in open(os.path.join(dataDir, 'test_files.txt'))]
+
+dataDir = net_config.dataDir
+testlist = [os.path.join(dataDir,line.rstrip())  for line in open(os.path.join(dataDir, 'test_files.txt'))]
 SHAPE_NAMES = [line.rstrip() for line in \
-               open(os.path.join(dataDir, 'modelnet40_shape_names.txt'))]
+               open(os.path.join(dataDir, 'shape_names.txt'))]
 
 NUM_POINT = net_config.num_input
 NUM_CLASSES = net_config.num_cls

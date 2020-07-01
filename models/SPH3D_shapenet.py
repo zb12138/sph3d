@@ -1,12 +1,9 @@
 import tensorflow as tf
 import sys
 import os
-ROOT_DIR = '/home/chunyang/workspace/SPH3D/sph3d/'
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
-# sys.path.append(os.path.join(BASE_DIR, '../'))
-sys.path.append(ROOT_DIR)
-# sys.path.append(os.path.join(BASE_DIR, '../utils'))
+ROOTDIR = "/home/xiaom/workspace/sph3dR/"
+sys.path.append(ROOTDIR)
+sys.path.append(os.path.join(ROOTDIR, 'utils'))
 import utils.sph3gcn_util as s3g_util
 
 
