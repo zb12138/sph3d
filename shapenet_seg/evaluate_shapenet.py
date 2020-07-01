@@ -271,8 +271,8 @@ def eval_one_epoch(sess, ops, next_test_element):
 
                 pred_gt = np.concatenate([np.reshape(pred_label, (-1, 1)),
                                           np.reshape(batch_gt_label[b], (-1, 1))], axis=1)
-                np.savetxt('%s_results/%d.txt'%(shape_name,batch_idx*BATCH_SIZE+b),
-                           pred_gt, fmt='%d')
+                # np.savetxt('%s_results/%d.txt'%(shape_name,batch_idx*BATCH_SIZE+b),
+                #            pred_gt, fmt='%d')
 
                 part_ious = [0.0 for _ in range(NUM_CLASSES)]
                 for l in range(NUM_CLASSES):

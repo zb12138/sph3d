@@ -80,10 +80,10 @@ BEST_REU = data_util.savebest(os.path.join(LOG_DIR, 'best_result.txt'))
 
 # net_config = importlib.import_module(FLAGS.config)
 # import shapenet_seg.shapenet_config as net_config
-spec = importlib.util.spec_from_file_location('',os.path.join(logDir,FLAGS.config+'.py'))
+spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,FLAGS.config+'.py'))
 net_config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(net_config)
-spec = importlib.util.spec_from_file_location('',os.path.join(logDir,FLAGS.model+'.py'))
+spec = importlib.util.spec_from_file_location('',os.path.join(LOG_DIR,FLAGS.model+'.py'))
 MODEL = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(MODEL)
 

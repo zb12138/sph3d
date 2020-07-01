@@ -22,4 +22,4 @@ sample = 'FPS' #{'FPS','IDS','random'}
 
 with_bn = True
 with_bias = False
-LOADMODEL = False
+# LOADMODEL = False
