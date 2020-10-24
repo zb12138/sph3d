@@ -3,14 +3,14 @@
     Will use H5 dataset in default. If using normal, will shift to the normal dataset.
 '''
 # seting
-LOADMODEL = True # if LOADMODEL = False and COPYCODE = True will copy the code
+LOADMODEL = False # if LOADMODEL = False and COPYCODE = True will copy the code
 ORIDATA = False
 TRAIN_RATATION = False
 EVAL_RATATION = False
 EVAL_STEP = 1
 WEIGHT_DECAY = 0.0005
 DATADIR = "/home/xiaom/workspace/data/modelnet40"
-COPYCODE = False
+COPYCODE = True
 
 import argparse
 import time
@@ -22,7 +22,7 @@ import importlib
 import os
 import sys
 # from tensorflow.python import debug as tf_debug
-os.environ["CUDA_VISIBLE_DEVICES"]='0'
+# os.environ["CUDA_VISIBLE_DEVICES"]='0'
 baseDir = os.path.dirname(os.path.abspath(__file__)) #"/home/xiaom/workspace/sph3dR/modelnet40_cls"
 rootDir = os.path.dirname(baseDir) #"/home/xiaom/workspace/sph3dR"
 print("I: baseDir: "+baseDir)
@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--config', default='modelnet_config', help='Model name [default: modelnet_config]')
-parser.add_argument('--log_dir', default='log_modelnet_inv4', help='Log dir [default: log_modelnet]')
+parser.add_argument('--log_dir', default='log_modelnet_inv5', help='Log dir [default: log_modelnet]')
 # parser.add_argument('--load_ckpt', '-l', help='Path to a check point file for load')
 parser.add_argument('--load_ckpt',default='model.ckpt-78' , help='Path to a check point file for load')
 parser.add_argument('--max_epoch', type=int, default=499, help='Epoch to run [default: 251]')
