@@ -8,7 +8,7 @@ import os
 import sys
 import scipy.io as sio
 
-ROTATION = True
+ROTATION = False
 
 os.environ["CUDA_VISIBLE_DEVICES"]='0'
 # baseDir = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch Size during training [default: 16]')
-parser.add_argument('--log_dir', default='log_modelnet_inv2', help='Log dir [default: log]')
+parser.add_argument('--log_dir', default='log_modelnet_invX', help='Log dir [default: log]')
 # parser.add_argument('--model_name', default='model.ckpt-228', help='model checkpoint file path [default: model.ckpt]')
 parser.add_argument('--model_name', default='bestmodel.ckpt', help='model checkpoint file path [default: model.ckpt]')
 parser.add_argument('--num_votes', type=int, default=1, help='Aggregate classification scores from multiple rotations [default: 1]')
@@ -58,7 +58,8 @@ net_config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(net_config)
 
 
-dataDir = net_config.dataDir
+# dataDir = net_config.dataDir
+dataDir = "/home/xiaom/workspace/data/modelnet40"
 testlist = [os.path.join(dataDir,line.rstrip())  for line in open(os.path.join(dataDir, 'test_files.txt'))]
 SHAPE_NAMES = [line.rstrip() for line in \
                open(os.path.join(dataDir, 'shape_names.txt'))]

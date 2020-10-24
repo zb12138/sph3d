@@ -22,7 +22,7 @@ import importlib
 import os
 import sys
 # from tensorflow.python import debug as tf_debug
-# os.environ["CUDA_VISIBLE_DEVICES"]='0'
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
 baseDir = os.path.dirname(os.path.abspath(__file__)) #"/home/xiaom/workspace/sph3dR/modelnet40_cls"
 rootDir = os.path.dirname(baseDir) #"/home/xiaom/workspace/sph3dR"
 print("I: baseDir: "+baseDir)
@@ -35,8 +35,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--model', default='SPH3D_modelnet', help='Model name [default: SPH3D_modelnet]')
 parser.add_argument('--config', default='modelnet_config', help='Model name [default: modelnet_config]')
-parser.add_argument('--log_dir', default='log_modelnet_inv5', help='Log dir [default: log_modelnet]')
-# parser.add_argument('--load_ckpt', '-l', help='Path to a check point file for load')
+parser.add_argument('--log_dir', default='log_modelnet_invX', help='Log dir [default: log_modelnet]')
 parser.add_argument('--load_ckpt',default='model.ckpt-78' , help='Path to a check point file for load')
 parser.add_argument('--max_epoch', type=int, default=499, help='Epoch to run [default: 251]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 16]')
