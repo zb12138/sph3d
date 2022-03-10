@@ -9,7 +9,7 @@ import h5py
 # parser.add_argument('--data_path', required=True, help='path to the directory of the point cloud dataset')
 # INFO = parser.parse_args()
 # dataDir = INFO.data_path
-dataDir = "/mnt/Cloud/fuchy/modelnet40_ply_hdf5_2048"
+dataDir = "/home/xiaom/workspace/data/modelnet40_ply_hdf5_2048"
 
 print(dataDir)
 
@@ -42,7 +42,7 @@ def make_tfrecord_cls(dataDir, filelist, classlist, num_point=10000,
     label = list()
     FILES = [line.rstrip() for line in open(os.path.join(dataDir, filelist + '.txt'))]
     for i,filename in enumerate(FILES):    
-        h5_filename = filename
+        h5_filename = '/home/xiaom/workspace/'+filename
         f = h5py.File(h5_filename,"r")
         data.extend(f['data'][:])
         label.extend(f['label'][:])
@@ -70,6 +70,10 @@ def make_tfrecord_cls(dataDir, filelist, classlist, num_point=10000,
         assert(data.shape[1]==3) # the input point cloud has xyz
 
         xyz = data[:,0:3]
+        
+###random
+        
+###
 
         if debug:
             print(classname, i, label)
@@ -94,15 +98,17 @@ def make_tfrecord_cls(dataDir, filelist, classlist, num_point=10000,
             with tf.Session(config=config) as sess:
                 sample_index = sess.run(index)
 
-            xyz = xyz[sample_index,:]
+           
+
+            
         elif num_point > xyz.shape[0]:
             print("The original pointcloud size %d must be no less than the expected %d"%(xyz.shape[0],num_point))
             exit()
-
+        xyz = xyz[:-100,:]
         xyz = xyz - np.mean(xyz, axis=0)
         scale = np.sqrt(np.amax(np.sum(np.square(xyz), axis=1)))
         xyz /= scale # sphere centered at (0,0,0)
-
+        xyz = np.vstack((xyz,np.random.rand(100,3)/5+((np.random.rand(1,3)>0.5)*2-1))).astype(np.float32)
         if debug:
             print("resampled data size:")
   
@@ -132,13 +138,13 @@ if __name__=='__main__':
     rootDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     print(rootDir)
 
-    trainlist = 'modelnet40_train'
-    testlist = 'modelnet40_test'
-    classlist = 'modelnet40_shape_names'
+    trainlist = 'train_files'
+    testlist = 'test_files'
+    classlist = 'shape_names'
 
     num_point = 2048
 
-    store_folder = os.path.join(rootDir, 'data/modelnet40')
+    store_folder = '/home/xiaom/workspace/data/modelnet40Random2'
 
     print("===================make tfrecords of modelnets: 10K points===================")
     #make_tfrecord_cls(dataDir, testlist, classlist, store_folder=store_folder, num_point=num_point, debug=False)

@@ -77,13 +77,15 @@ def placeholder_inputs(batch_size, num_point):
     label_pl = tf.placeholder(tf.int32, shape=(batch_size))
     return xyz_pl, label_pl
 
-trainlist = "/home/chunyang/workspace/SPH3D/SPH3D-GCN/data/modelnet40/data_test0.tfrecord"
+trainlist = "/home/xiaom/workspace/data/modelnet40Random2/data_files9.tfrecord"
 trainset = input_fn(trainlist, BATCH_SIZE, 10000)
 train_iterator = trainset.make_initializable_iterator()
 next_train_element = train_iterator.get_next()
+import pt
 with tf.Session() as sess:
     sess.run(train_iterator.initializer)
     batch_xyz, batch_label = sess.run(next_train_element)
     r = sess.run(pca.tf_pca(batch_xyz))
-print(r)
+pt.pcshow(r[0])
+print(r.shape)
 # scio.savemat('data_test0_tfrecord0_15.mat',{'data':batch_xyz,'label':batch_label,'pcadata':r})

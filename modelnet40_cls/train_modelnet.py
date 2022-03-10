@@ -9,7 +9,7 @@ TRAIN_RATATION = False
 EVAL_RATATION = False
 EVAL_STEP = 1
 WEIGHT_DECAY = 0.0005
-DATADIR = "/home/xiaom/workspace/data/modelnet40"
+DATADIR = "/home/xiaom/workspace/data/modelnet40Random2"
 COPYCODE = True
 
 import argparse

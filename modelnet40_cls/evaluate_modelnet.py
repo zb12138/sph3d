@@ -59,7 +59,7 @@ spec.loader.exec_module(net_config)
 
 
 # dataDir = net_config.dataDir
-dataDir = "/home/xiaom/workspace/data/modelnet40"
+dataDir = "/home/xiaom/workspace/data/modelnet40Random2"
 testlist = [os.path.join(dataDir,line.rstrip())  for line in open(os.path.join(dataDir, 'test_files.txt'))]
 SHAPE_NAMES = [line.rstrip() for line in \
                open(os.path.join(dataDir, 'shape_names.txt'))]
@@ -114,9 +114,17 @@ def input_fn(filelist, batch_size=16, buffer_size=10000):
 
     return dataset
 
+def calcSampleNum(testlist):
+    c = 0
+    for fn in testlist:
+        for record in tf.python_io.tf_record_iterator(fn):
+            c += 1
+    return c
 
 def evaluate(num_votes):
     # ===============================Prepare the Dataset===============================
+    N = calcSampleNum(testlist)
+    
     testset = input_fn(testlist, BATCH_SIZE, 10000)
     test_iterator = testset.make_initializable_iterator()
     next_test_element = test_iterator.get_next()
@@ -153,10 +161,12 @@ def evaluate(num_votes):
                'label_pl': label_pl,
                'training_pl': training_pl,
                'pred': pred,
-               'loss': total_loss}
-
+               'loss': total_loss,
+               'sampleNum':N}
+        
         sess.run(test_iterator.initializer)
         eval_one_epoch(sess, ops, next_test_element, num_votes)
+        print(N," samples tested")
     # =====================================The End=====================================
 
 
@@ -174,25 +184,29 @@ def eval_one_epoch(sess, ops, next_test_element, num_votes=1, topk=1):
     batch_idx = 0
     total_seen_class = [0 for _ in range(NUM_CLASSES)]
     total_correct_class = [0 for _ in range(NUM_CLASSES)]
-
-    pred_votes = np.zeros((2468, num_votes, NUM_CLASSES))
-    pred_label = np.zeros((2468, ), np.int32)
+    N = ops['sampleNum']
+    pred_votes = np.zeros((N, num_votes, NUM_CLASSES))
+    pred_label = np.zeros((N, ), np.int32)
 
     test_time = 0.0
+    batch_size = BATCH_SIZE
+
+
     while True:
         try:
             batch_xyz, batch_label = sess.run(next_test_element)
             bsize = batch_xyz.shape[0]
-            if bsize != BATCH_SIZE:
-                continue
+            if bsize != batch_size:
+                batch_size = bsize
+                batch_xyz = np.vstack((batch_xyz,(batch_xyz[np.tile(0,BATCH_SIZE - bsize)])))
+                batch_label = np.concatenate((batch_label,np.zeros(BATCH_SIZE - bsize,dtype=np.int)))
+                # continue
             batch_xyz = batch_xyz[:, :, [0, 2, 1]]  # xzy to xyz
 
             print('Batch: %03d, batch size: %d' % (batch_idx, bsize))
-
-            cur_batch_xyz[0:bsize, ...] = batch_xyz
-            cur_batch_label[0:bsize] = batch_label
-
-            batch_pred_sum = np.zeros((BATCH_SIZE, NUM_CLASSES))  # score for classes
+            cur_batch_xyz = batch_xyz
+            cur_batch_label  = batch_label
+            batch_pred_sum = np.zeros((batch_size, NUM_CLASSES))  # score for classes
             for vote_idx in range(num_votes):
                 augment_xyz = batch_xyz.copy()
                 # if vote_idx>0:
@@ -207,9 +221,9 @@ def eval_one_epoch(sess, ops, next_test_element, num_votes=1, topk=1):
                 loss_val, pred_val = sess.run([ops['loss'], ops['pred']], feed_dict=feed_dict)
                 test_time += (time.time() - now)
 
-                pred_votes[batch_idx*BATCH_SIZE:(batch_idx*BATCH_SIZE+bsize),vote_idx,:] = pred_val[0:bsize,:]
-                pred_label[batch_idx*BATCH_SIZE:(batch_idx*BATCH_SIZE+bsize)] = cur_batch_label[0:bsize]
-                batch_pred_sum += pred_val
+                pred_votes[batch_idx*batch_size:(batch_idx*batch_size+bsize),vote_idx,:] = pred_val[0:bsize,:]
+                pred_label[batch_idx*batch_size:(batch_idx*batch_size+bsize)] = cur_batch_label[0:bsize]
+                batch_pred_sum += pred_val[0:bsize,:]
 
             pred_val = np.argmax(batch_pred_sum, 1)
             correct = np.sum(pred_val[0:bsize] == batch_label[0:bsize])
